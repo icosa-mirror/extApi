@@ -271,7 +271,11 @@ namespace extApi
             for (var i = startIndex; i < segments.Count; i++)
             {
                 var name = segments[i].TrimEnd('/');
-                var node = currentNode.Nodes.Find(n => n.Name == name);
+                ApiRouteNode node = null;
+
+                if (currentNode == null || currentNode.Nodes == null) break;
+
+                node = currentNode.Nodes.Find(n => n.Name == name);
                 if (node == null)
                 {
                     if (create)
