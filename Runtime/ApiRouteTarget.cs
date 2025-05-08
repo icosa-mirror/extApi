@@ -29,6 +29,15 @@ namespace extApi
             foreach (var parameterInfo in ParameterInfos)
             {
                 var parameterType = parameterInfo.ParameterType;
+                if (context.Request.QueryString.Count > 0)
+                {
+                    var queryString = context.Request.QueryString[parameterInfo.Name];
+                    if (!string.IsNullOrEmpty(queryString))
+                    {
+                        args.Add(TypeDescriptor.GetConverter(parameterType).ConvertFromString(null, CultureInfo.InvariantCulture, queryString));
+                        continue;
+                    }
+                }
                 if (parameterInfo.GetCustomAttribute<ApiBodyAttribute>() == null)
                 {
                     args.Add(routeParameters.TryGetValue(parameterInfo.Name, out var value)
