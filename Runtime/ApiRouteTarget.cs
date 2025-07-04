@@ -34,14 +34,17 @@ namespace extApi
                     var queryString = context.Request.QueryString[parameterInfo.Name];
                     if (!string.IsNullOrEmpty(queryString))
                     {
-                        args.Add(TypeDescriptor.GetConverter(parameterType).ConvertFromString(null, CultureInfo.InvariantCulture, queryString));
+                        args.Add(TypeDescriptor.GetConverter(parameterType)
+                            .ConvertFromString(null, CultureInfo.InvariantCulture, queryString));
                         continue;
                     }
                 }
+
                 if (parameterInfo.GetCustomAttribute<ApiBodyAttribute>() == null)
                 {
                     args.Add(routeParameters.TryGetValue(parameterInfo.Name, out var value)
-                        ? TypeDescriptor.GetConverter(parameterType).ConvertFromString(null, CultureInfo.InvariantCulture, value)
+                        ? TypeDescriptor.GetConverter(parameterType)
+                            .ConvertFromString(null, CultureInfo.InvariantCulture, value)
                         : ApiUtils.CreateDefault(parameterInfo.ParameterType));
                 }
                 else
@@ -51,19 +54,54 @@ namespace extApi
                         using var stream = context.Request.InputStream;
                         using var reader = new StreamReader(stream, context.Request.ContentEncoding);
 
-                        try
+                        if (context.Request.ContentType.StartsWith("application/json",
+                                StringComparison.OrdinalIgnoreCase))
                         {
-                            args.Add(JsonUtility.FromJson(reader.ReadToEnd(), parameterType));
+                            try
+                            {
+                                args.Add(JsonUtility.FromJson(reader.ReadToEnd(), parameterType));
+                            }
+                            catch (Exception)
+                            {
+                                Debug.LogWarning("Unable to parse"); // TODO: More info
+                                args.Add(ApiUtils.CreateDefault(parameterType));
+                            }
                         }
-                        catch (Exception)
+                        else if (context.Request.ContentType.StartsWith("application/x-www-form-urlencoded",
+                                     StringComparison.OrdinalIgnoreCase))
                         {
-                            Debug.LogWarning("Unable to parse"); // TODO: More info
-                            args.Add(ApiUtils.CreateDefault(parameterType));
+                            var instance = Activator.CreateInstance(parameterType);
+                            var formContent = reader.ReadToEnd();
+                            var pairs = formContent.Split('&');
+                            foreach (var pair in pairs)
+                            {
+                                var keyValue = pair.Split('=');
+                                if (keyValue.Length == 2)
+                                {
+                                    var key = WebUtility.UrlDecode(keyValue[0]);
+                                    var value = WebUtility.UrlDecode(keyValue[1]);
+                                    var prop = parameterType.GetProperty(key);
+                                    if (prop != null)
+                                    {
+                                        if (prop != null && prop.CanWrite)
+                                        {
+                                            prop.SetValue(instance, TypeDescriptor.GetConverter(prop.PropertyType)
+                                                .ConvertFromString(null, CultureInfo.InvariantCulture, value));
+                                        }
+                                    }
+                                    else
+                                    {
+                                        var field = parameterType.GetField(key);
+                                        if (field != null)
+                                        {
+                                            field.SetValue(instance, TypeDescriptor.GetConverter(field.FieldType)
+                                                .ConvertFromString(null, CultureInfo.InvariantCulture, value));
+                                        }
+                                    }
+                                }
+                            }
+                            args.Add(instance);
                         }
-                    }
-                    else
-                    {
-                        args.Add(ApiUtils.CreateDefault(parameterType));
                     }
                 }
             }
