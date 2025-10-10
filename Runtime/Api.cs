@@ -191,18 +191,28 @@ namespace extApi
                             continue;
                     }
 
-                    session.Context.Response.ContentType = "application/json";
                     session.Context.Response.StatusCode = (int)session.Result.StatusCode;
+                    byte[] rawData = Array.Empty<byte>();
 
-                    if (session.Result.Json != null)
+                    if (session.Result.Location != null)
+                    {
+                        session.Context.Response.RedirectLocation = session.Result.Location;
+                    }
+                    else if (session.Result.RawBody != null)
+                    {
+                        rawData = Encoding.UTF8.GetBytes(session.Result.RawBody);
+                        session.Context.Response.ContentType = "text/plain";
+                    }
+                    else if (session.Result.Json != null)
                     {
                         var json = session.Result.Json;
-                        var jsonData = Encoding.UTF8.GetBytes(json);
-
-                        session.Context.Response.ContentLength64 = jsonData.Length;
-                        session.Context.Response.OutputStream.Write(jsonData);
-                        session.Context.Response.OutputStream.Flush();
+                        rawData = Encoding.UTF8.GetBytes(json);
+                        session.Context.Response.ContentType = "application/json";
                     }
+
+                    session.Context.Response.ContentLength64 = rawData.Length;
+                    session.Context.Response.OutputStream.Write(rawData);
+                    session.Context.Response.OutputStream.Flush();
 
                     session.Context.Response.Close();
                 }
