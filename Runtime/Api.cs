@@ -7,6 +7,7 @@ using System.Reflection;
 using System.Text;
 using System.Threading;
 using UnityEngine;
+using Newtonsoft.Json;
 
 namespace extApi
 {
@@ -577,13 +578,28 @@ namespace extApi
                     schemaDictionary["format"] = parameter.Format;
 
                 if (!string.IsNullOrWhiteSpace(parameter.Example))
-                    schemaDictionary["example"] = parameter.Example;
+                    schemaDictionary["example"] = ParseOpenApiExample(parameter);
 
                 if (!string.IsNullOrWhiteSpace(parameter.DisplayType))
                     schemaDictionary["x-extapi-displayType"] = parameter.DisplayType;
             }
 
             return schema;
+        }
+
+        private static object ParseOpenApiExample(ApiParameterDescription parameter)
+        {
+            if (!parameter.BindingSources.Contains("body"))
+                return parameter.Example;
+
+            try
+            {
+                return JsonConvert.DeserializeObject(parameter.Example);
+            }
+            catch
+            {
+                return parameter.Example;
+            }
         }
 
         private object CreateOpenApiSchema(Type type, IDictionary<string, object> componentSchemas)
@@ -770,6 +786,18 @@ namespace extApi
             html.AppendLine("    details.disclosure > summary { cursor: pointer; color: #0f172a; font-weight: 600; }");
             html.AppendLine("    details.disclosure > summary::marker { color: #475569; }");
             html.AppendLine("    details.disclosure > .content { margin-top: 8px; }");
+            html.AppendLine("    .try-panel { margin-top: 14px; }");
+            html.AppendLine("    .try-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; margin-top: 10px; }");
+            html.AppendLine("    .try-field { display: flex; flex-direction: column; gap: 6px; }");
+            html.AppendLine("    .try-field label { font-size: 12px; font-weight: 600; color: #334155; text-transform: uppercase; letter-spacing: 0.04em; }");
+            html.AppendLine("    .try-field input, .try-field select, .try-field textarea { width: 100%; box-sizing: border-box; border: 1px solid #cbd5e1; border-radius: 8px; padding: 9px 10px; font: inherit; color: #0f172a; background: #fff; }");
+            html.AppendLine("    .try-field textarea { min-height: 140px; resize: vertical; font-family: Consolas, monospace; }");
+            html.AppendLine("    .try-actions { display: flex; align-items: center; gap: 10px; margin-top: 12px; }");
+            html.AppendLine("    .try-button { border: 0; border-radius: 8px; padding: 10px 14px; font: inherit; font-weight: 600; color: #fff; background: #0f172a; cursor: pointer; }");
+            html.AppendLine("    .try-button:hover { background: #1e293b; }");
+            html.AppendLine("    .try-request { color: #475569; font-size: 13px; }");
+            html.AppendLine("    .try-result { margin-top: 12px; padding: 12px; border-radius: 8px; background: #0f172a; color: #e2e8f0; white-space: pre-wrap; word-break: break-word; font-family: Consolas, monospace; font-size: 13px; }");
+            html.AppendLine("    .try-result.empty { background: #f8fafc; color: #64748b; border: 1px dashed #cbd5e1; }");
             html.AppendLine("    code { font-family: Consolas, monospace; }");
             html.AppendLine("  </style>");
             html.AppendLine("</head>");
@@ -789,6 +817,8 @@ namespace extApi
                 {
                     html.AppendLine($"      <div class=\"meta\">{HtmlEncode(route.Summary)}</div>");
                 }
+
+                html.AppendLine(RenderTryPanel(route));
 
                 if (route.Parameters.Count == 0)
                 {
@@ -844,6 +874,49 @@ namespace extApi
             }
 
             html.AppendLine("  </div>");
+            html.AppendLine("  <script>");
+            html.AppendLine("    async function extApiTryRoute(button) {");
+            html.AppendLine("      const form = button.closest('.try-form');");
+            html.AppendLine("      const result = form.querySelector('.try-result');");
+            html.AppendLine("      const requestLine = form.querySelector('.try-request code');");
+            html.AppendLine("      const method = form.dataset.method;");
+            html.AppendLine("      let path = form.dataset.path;");
+            html.AppendLine("      const query = new URLSearchParams();");
+            html.AppendLine("      let body = null;");
+            html.AppendLine("      for (const field of form.querySelectorAll('[data-try-binding]')) {");
+            html.AppendLine("        const binding = field.dataset.tryBinding;");
+            html.AppendLine("        const name = field.dataset.tryName;");
+            html.AppendLine("        const value = field.value;");
+            html.AppendLine("        if (binding === 'route') {");
+            html.AppendLine("          path = path.replace(`{${name}}`, encodeURIComponent(value));");
+            html.AppendLine("        } else if (binding === 'query') {");
+            html.AppendLine("          if (value !== '') query.append(name, value);");
+            html.AppendLine("        } else if (binding === 'body') {");
+            html.AppendLine("          body = value;");
+            html.AppendLine("        }");
+            html.AppendLine("      }");
+            html.AppendLine("      const url = query.toString() ? `${path}?${query.toString()}` : path;");
+            html.AppendLine("      requestLine.textContent = `${method} ${url}`;");
+            html.AppendLine("      result.classList.remove('empty');");
+            html.AppendLine("      result.textContent = 'Loading...';");
+            html.AppendLine("      const options = { method, headers: {} };");
+            html.AppendLine("      if (body !== null && body.trim() !== '') {");
+            html.AppendLine("        options.headers['Content-Type'] = 'application/json';");
+            html.AppendLine("        options.body = body;");
+            html.AppendLine("      }");
+            html.AppendLine("      try {");
+            html.AppendLine("        const response = await fetch(url, options);");
+            html.AppendLine("        const text = await response.text();");
+            html.AppendLine("        let pretty = text;");
+            html.AppendLine("        try {");
+            html.AppendLine("          pretty = text ? JSON.stringify(JSON.parse(text), null, 2) : '';");
+            html.AppendLine("        } catch (error) { }");
+            html.AppendLine("        result.textContent = `${response.status} ${response.statusText}\\n${pretty}`.trimEnd();");
+            html.AppendLine("      } catch (error) {");
+            html.AppendLine("        result.textContent = `Request failed\\n${error}`;");
+            html.AppendLine("      }");
+            html.AppendLine("    }");
+            html.AppendLine("  </script>");
             html.AppendLine("</body>");
             html.AppendLine("</html>");
 
@@ -1144,6 +1217,226 @@ namespace extApi
                 parts.Add(extraDescription.Trim());
 
             return string.Join(" ", parts);
+        }
+
+        private string RenderTryPanel(ApiRouteDescription route)
+        {
+            var nonBodyParameters = route.Parameters
+                .Where(parameter => !parameter.BindingSources.Contains("body"))
+                .ToList();
+            var bodyParameter = route.Parameters.FirstOrDefault(parameter => parameter.BindingSources.Contains("body"));
+            var requestPreview = BuildTryRequestPreview(route, nonBodyParameters);
+            var routeKey = $"{route.HttpMethod}-{route.Path}".Replace("/", "-").Replace("{", string.Empty).Replace("}", string.Empty).Replace("?", string.Empty).Replace("&", string.Empty);
+
+            var html = new StringBuilder();
+            html.AppendLine("      <details class=\"disclosure try-panel\">");
+            html.AppendLine("        <summary>Try it</summary>");
+            html.AppendLine("        <div class=\"content\">");
+            html.AppendLine($"          <form class=\"try-form\" onsubmit=\"event.preventDefault(); extApiTryRoute(this.querySelector('.try-button'));\" data-method=\"{HtmlEncode(route.HttpMethod)}\" data-path=\"{HtmlEncode(route.Path)}\">");
+            html.AppendLine($"            <div class=\"try-request\">Request: <code>{HtmlEncode(requestPreview)}</code></div>");
+
+            if (nonBodyParameters.Count > 0 || bodyParameter != null)
+            {
+                html.AppendLine("            <div class=\"try-grid\">");
+                foreach (var parameter in nonBodyParameters)
+                {
+                    html.AppendLine(RenderTryField(routeKey, parameter, parameter.BindingSources.Contains("route") ? "route" : "query"));
+                }
+
+                if (bodyParameter != null)
+                {
+                    html.AppendLine(RenderTryBodyField(routeKey, bodyParameter));
+                }
+
+                html.AppendLine("            </div>");
+            }
+
+            html.AppendLine("            <div class=\"try-actions\">");
+            html.AppendLine("              <button type=\"submit\" class=\"try-button\">Try it</button>");
+            html.AppendLine("            </div>");
+            html.AppendLine("            <pre class=\"try-result empty\">No response yet.</pre>");
+            html.AppendLine("          </form>");
+            html.AppendLine("        </div>");
+            html.AppendLine("      </details>");
+            return html.ToString();
+        }
+
+        private string RenderTryField(string routeKey, ApiParameterDescription parameter, string binding)
+        {
+            var sampleValue = GetSampleParameterValue(parameter);
+            var details = BuildParameterDescription(parameter, null);
+            var fieldId = $"try-{routeKey}-{parameter.Name}";
+            var html = new StringBuilder();
+            html.AppendLine("              <div class=\"try-field\">");
+            html.AppendLine($"                <label for=\"{HtmlEncode(fieldId)}\">{HtmlEncode(parameter.Name)}</label>");
+
+            if (parameter.AllowedValues != null && parameter.AllowedValues.Count > 0)
+            {
+                html.AppendLine($"                <select id=\"{HtmlEncode(fieldId)}\" data-try-binding=\"{HtmlEncode(binding)}\" data-try-name=\"{HtmlEncode(parameter.Name)}\">");
+                foreach (var allowedValue in parameter.AllowedValues)
+                {
+                    var selectedAttribute = string.Equals(allowedValue, sampleValue, StringComparison.Ordinal) ? " selected" : string.Empty;
+                    html.AppendLine($"                  <option value=\"{HtmlEncode(allowedValue)}\"{selectedAttribute}>{HtmlEncode(allowedValue)}</option>");
+                }
+
+                html.AppendLine("                </select>");
+            }
+            else
+            {
+                var inputType = GetTryInputType(parameter);
+                var stepAttribute = string.Equals(inputType, "number", StringComparison.Ordinal) ? " step=\"any\"" : string.Empty;
+                html.AppendLine($"                <input id=\"{HtmlEncode(fieldId)}\" type=\"{HtmlEncode(inputType)}\" value=\"{HtmlEncode(sampleValue)}\" data-try-binding=\"{HtmlEncode(binding)}\" data-try-name=\"{HtmlEncode(parameter.Name)}\"{stepAttribute}>");
+            }
+
+            if (!string.IsNullOrWhiteSpace(details))
+                html.AppendLine($"                <div class=\"empty\">{HtmlEncode(details)}</div>");
+
+            html.AppendLine("              </div>");
+            return html.ToString();
+        }
+
+        private string RenderTryBodyField(string routeKey, ApiParameterDescription parameter)
+        {
+            var sampleValue = GetSampleBodyValue(parameter);
+            var fieldId = $"try-body-{routeKey}-{parameter.Name}";
+            var html = new StringBuilder();
+            html.AppendLine("              <div class=\"try-field\" style=\"grid-column: 1 / -1;\">");
+            html.AppendLine($"                <label for=\"{HtmlEncode(fieldId)}\">{HtmlEncode(parameter.Name)}</label>");
+            html.AppendLine($"                <textarea id=\"{HtmlEncode(fieldId)}\" data-try-binding=\"body\" data-try-name=\"{HtmlEncode(parameter.Name)}\">{HtmlEncode(sampleValue)}</textarea>");
+            html.AppendLine("              </div>");
+            return html.ToString();
+        }
+
+        private string BuildTryRequestPreview(ApiRouteDescription route, IEnumerable<ApiParameterDescription> nonBodyParameters)
+        {
+            var path = route.Path;
+            var queryParts = new List<string>();
+
+            foreach (var parameter in nonBodyParameters)
+            {
+                var sampleValue = GetSampleParameterValue(parameter);
+                if (parameter.BindingSources.Contains("route"))
+                {
+                    path = path.Replace($"{{{parameter.Name}}}", Uri.EscapeDataString(sampleValue));
+                }
+                else
+                {
+                    queryParts.Add($"{Uri.EscapeDataString(parameter.Name)}={Uri.EscapeDataString(sampleValue)}");
+                }
+            }
+
+            if (queryParts.Count > 0)
+                path = $"{path}?{string.Join("&", queryParts)}";
+
+            return $"{route.HttpMethod} {path}";
+        }
+
+        private static string GetSampleParameterValue(ApiParameterDescription parameter)
+        {
+            if (!string.IsNullOrWhiteSpace(parameter.Example))
+                return parameter.Example;
+
+            if (parameter.AllowedValues != null && parameter.AllowedValues.Count > 0)
+                return parameter.AllowedValues[0];
+
+            if (string.Equals(parameter.DisplayType, "Vector3", StringComparison.OrdinalIgnoreCase))
+                return "1,1,1";
+
+            if (string.Equals(parameter.DisplayType, "int[]", StringComparison.OrdinalIgnoreCase))
+                return "1,2,3";
+
+            var type = Nullable.GetUnderlyingType(parameter.ClrType) ?? parameter.ClrType;
+            if (type.IsEnum)
+                return Enum.GetNames(type).FirstOrDefault() ?? "example";
+
+            if (type == typeof(bool))
+                return "true";
+
+            if (type == typeof(float) || type == typeof(double) || type == typeof(decimal))
+                return "1.0";
+
+            if (type == typeof(byte) || type == typeof(sbyte) || type == typeof(short) || type == typeof(ushort) ||
+                type == typeof(int) || type == typeof(uint) || type == typeof(long) || type == typeof(ulong))
+            {
+                return "1";
+            }
+
+            return "example";
+        }
+
+        private string GetSampleBodyValue(ApiParameterDescription parameter)
+        {
+            if (!string.IsNullOrWhiteSpace(parameter.Example))
+                return parameter.Example;
+
+            if (parameter.Body == null)
+                return "{}";
+
+            var sampleObject = BuildSampleObject(parameter.Body);
+            return JsonConvert.SerializeObject(sampleObject, Formatting.Indented);
+        }
+
+        private object BuildSampleObject(ApiObjectDescription description)
+        {
+            if (description == null)
+                return null;
+
+            if (description.IsRecursive)
+                return null;
+
+            if (!string.IsNullOrWhiteSpace(description.ItemType))
+            {
+                return new[] { BuildSampleObject(description.Item ?? new ApiObjectDescription { Type = description.ItemType }) };
+            }
+
+            if (description.Members == null || description.Members.Count == 0)
+                return BuildSampleScalarValue(description.Type);
+
+            var sample = new Dictionary<string, object>(StringComparer.Ordinal);
+            foreach (var member in description.Members)
+            {
+                sample[member.Name] = member.Object == null
+                    ? BuildSampleScalarValue(member.Type)
+                    : BuildSampleObject(member.Object);
+            }
+
+            return sample;
+        }
+
+        private static object BuildSampleScalarValue(string typeName)
+        {
+            return typeName switch
+            {
+                "Boolean" => true,
+                "Byte" => 1,
+                "SByte" => 1,
+                "Int16" => 1,
+                "UInt16" => 1,
+                "Int32" => 1,
+                "UInt32" => 1,
+                "Int64" => 1,
+                "UInt64" => 1,
+                "Single" => 1.0f,
+                "Double" => 1.0d,
+                "Decimal" => 1.0m,
+                "String" => "example",
+                _ => "example"
+            };
+        }
+
+        private static string GetTryInputType(ApiParameterDescription parameter)
+        {
+            var type = Nullable.GetUnderlyingType(parameter.ClrType) ?? parameter.ClrType;
+            if (type == typeof(byte) || type == typeof(sbyte) || type == typeof(short) || type == typeof(ushort) ||
+                type == typeof(int) || type == typeof(uint) || type == typeof(long) || type == typeof(ulong))
+            {
+                return "number";
+            }
+
+            if (type == typeof(float) || type == typeof(double) || type == typeof(decimal))
+                return "number";
+
+            return "text";
         }
 
         private static string RenderBodySchema(ApiObjectDescription body)
