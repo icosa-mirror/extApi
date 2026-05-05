@@ -16,5 +16,7 @@ namespace extApi
 
         // output
         public ApiResult Result;
+
+        public bool HasBindingError => Result != null;
     }
 }

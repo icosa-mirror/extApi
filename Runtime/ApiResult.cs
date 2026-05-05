@@ -12,11 +12,13 @@ namespace extApi
         public static ApiResult InternalServerError(object result = null) => new(HttpStatusCode.InternalServerError, result);
         public static ApiResult Redirect(Uri url = null) => new(HttpStatusCode.Found, url);
         public static ApiResult Status(HttpStatusCode code, object result = null) => new(code, result);
+        public static ApiResult Html(string html, HttpStatusCode code = HttpStatusCode.OK) => new(code, html, "text/html; charset=utf-8");
 
         public HttpStatusCode StatusCode { get; }
         public string Json { get; }
         public string RawBody { get; }
         public string Location { get; }
+        public string ContentType { get; }
 
         private ApiResult(HttpStatusCode statusCode)
         {
@@ -34,8 +36,12 @@ namespace extApi
         }
 
         public ApiResult(HttpStatusCode statusCode, string result) : this(statusCode)
+            => RawBody = result?.ToString();
+
+        private ApiResult(HttpStatusCode statusCode, string result, string contentType) : this(statusCode)
         {
             RawBody = result?.ToString();
+            ContentType = contentType;
         }
     }
 }
