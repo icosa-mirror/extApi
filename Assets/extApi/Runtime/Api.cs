@@ -14,10 +14,7 @@ namespace extApi
     public class ApiAccessOptions
     {
         public bool EnableRemoteRequests { get; set; }
-        public bool AllowAnyCorsOrigin { get; set; }
         public IReadOnlyCollection<string> AllowedCorsOrigins { get; set; } = Array.Empty<string>();
-        public string AllowedCorsMethods { get; set; } = "GET, POST, PUT, DELETE, HEAD, OPTIONS";
-        public string AllowedCorsHeaders { get; set; } = "Content-Type";
     }
 
     public class Api : IDisposable
@@ -288,16 +285,23 @@ namespace extApi
 
             context.Response.AddHeader("Access-Control-Allow-Origin", allowedOrigin);
             context.Response.AddHeader("Vary", "Origin");
-            context.Response.AddHeader("Access-Control-Allow-Methods", _accessOptions.AllowedCorsMethods);
-            context.Response.AddHeader("Access-Control-Allow-Headers", _accessOptions.AllowedCorsHeaders);
+            context.Response.AddHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, HEAD, OPTIONS");
+            context.Response.AddHeader("Access-Control-Allow-Headers", "Content-Type");
             return true;
         }
 
         private bool TryGetAllowedCorsOrigin(string origin, out string allowedOrigin)
         {
-            if (_accessOptions.AllowAnyCorsOrigin)
+            if (_accessOptions.AllowedCorsOrigins != null &&
+                _accessOptions.AllowedCorsOrigins.Any(allowed => allowed?.Trim() == "*"))
             {
                 allowedOrigin = "*";
+                return true;
+            }
+
+            if (IsLocalCorsOrigin(origin))
+            {
+                allowedOrigin = origin;
                 return true;
             }
 
@@ -311,6 +315,17 @@ namespace extApi
 
             allowedOrigin = null;
             return false;
+        }
+
+        private static bool IsLocalCorsOrigin(string origin)
+        {
+            if (!Uri.TryCreate(origin, UriKind.Absolute, out var uri))
+                return false;
+
+            if (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps)
+                return false;
+
+            return uri.IsLoopback;
         }
 
         private bool TryHandleIntrospectionRequest(HttpListenerContext context, HttpMethod contextMethod)
