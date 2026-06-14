@@ -11,6 +11,15 @@ using Newtonsoft.Json;
 
 namespace extApi
 {
+    public class ApiAccessOptions
+    {
+        public bool EnableRemoteRequests { get; set; }
+        public bool AllowAnyCorsOrigin { get; set; }
+        public IReadOnlyCollection<string> AllowedCorsOrigins { get; set; } = Array.Empty<string>();
+        public string AllowedCorsMethods { get; set; } = "GET, POST, PUT, DELETE, HEAD, OPTIONS";
+        public string AllowedCorsHeaders { get; set; } = "Content-Type";
+    }
+
     public class Api : IDisposable
     {
         public const string RoutesEndpointSuffix = "openapi.json";
@@ -31,10 +40,16 @@ namespace extApi
         private CancellationToken _cancellationToken;
 
         private readonly ApiRouteNode _root = new("/");
+        private ApiAccessOptions _accessOptions = new();
 
 
         public Api() : this(ThreadMode.OtherThread) { }
         public Api(ThreadMode mode) => _threadMode = mode;
+
+        public void ConfigureAccess(ApiAccessOptions accessOptions)
+        {
+            _accessOptions = accessOptions ?? new ApiAccessOptions();
+        }
 
         public string GetRoutesEndpoint() => ApiUtils.Combine(GetIntrospectionBasePath(), RoutesEndpointSuffix);
 
@@ -141,8 +156,24 @@ namespace extApi
                 {
                     var context = _listener.GetContext();
                     var contextMethod = new HttpMethod(context.Request.HttpMethod);
-                    
-                    context.Response.AddHeader("Access-Control-Allow-Origin", "*");
+
+                    var isAllowedRequest = TryApplyAccessPolicy(context);
+
+                    if (contextMethod == HttpMethod.Options)
+                    {
+                        context.Response.StatusCode = isAllowedRequest
+                            ? (int)HttpStatusCode.NoContent
+                            : (int)HttpStatusCode.Forbidden;
+                        context.Response.Close();
+                        continue;
+                    }
+
+                    if (!isAllowedRequest)
+                    {
+                        context.Response.StatusCode = (int)HttpStatusCode.Forbidden;
+                        context.Response.Close();
+                        continue;
+                    }
 
                     if (TryHandleIntrospectionRequest(context, contextMethod))
                         continue;
@@ -241,6 +272,45 @@ namespace extApi
                     Debug.LogError(e);
                 }
             }
+        }
+
+        private bool TryApplyAccessPolicy(HttpListenerContext context)
+        {
+            if (!context.Request.IsLocal && !_accessOptions.EnableRemoteRequests)
+                return false;
+
+            var origin = context.Request.Headers["Origin"];
+            if (string.IsNullOrWhiteSpace(origin))
+                return true;
+
+            if (!TryGetAllowedCorsOrigin(origin, out var allowedOrigin))
+                return false;
+
+            context.Response.AddHeader("Access-Control-Allow-Origin", allowedOrigin);
+            context.Response.AddHeader("Vary", "Origin");
+            context.Response.AddHeader("Access-Control-Allow-Methods", _accessOptions.AllowedCorsMethods);
+            context.Response.AddHeader("Access-Control-Allow-Headers", _accessOptions.AllowedCorsHeaders);
+            return true;
+        }
+
+        private bool TryGetAllowedCorsOrigin(string origin, out string allowedOrigin)
+        {
+            if (_accessOptions.AllowAnyCorsOrigin)
+            {
+                allowedOrigin = "*";
+                return true;
+            }
+
+            if (_accessOptions.AllowedCorsOrigins != null &&
+                _accessOptions.AllowedCorsOrigins.Any(allowed =>
+                    string.Equals(allowed?.Trim(), origin, StringComparison.OrdinalIgnoreCase)))
+            {
+                allowedOrigin = origin;
+                return true;
+            }
+
+            allowedOrigin = null;
+            return false;
         }
 
         private bool TryHandleIntrospectionRequest(HttpListenerContext context, HttpMethod contextMethod)
