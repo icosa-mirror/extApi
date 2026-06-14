@@ -11,6 +11,7 @@ Created by [iam1337](https://github.com/iam1337)
 ### Table of Contents
 - [Introduction](#introduction)
 - [Installation](#installation)
+- [Route Discovery](#route-discovery)
 - [Examples](#examples)
 - [Author Contacts](#author-contacts)
 
@@ -44,6 +45,79 @@ Or if you don't have it, add the scoped registry to manifest.json with the desir
 ],
 "dependencies": {
 	"com.iam1337.extapi": "1.0.0"
+}
+```
+
+## Route Discovery
+
+extApi exposes:
+- `GET /<api-root>/openapi.json` for OpenAPI 3.0.3 JSON
+- `GET /<api-root>/docs.html` for a human-readable HTML view
+
+If all registered routes share the same top-level static segment, extApi mounts the
+introspection endpoints under that same root. For example, routes under `/api/...`
+will expose:
+- `GET /api/openapi.json`
+- `GET /api/docs.html`
+
+If there is no single shared top-level root, extApi falls back to:
+- `GET /openapi.json`
+- `GET /docs.html`
+
+For accurate binding metadata, prefer the explicit parameter attributes:
+- `[ApiRouteParam]` for route segments
+- `[ApiQuery]` for query-string parameters
+- `[ApiBody]` for request bodies
+
+For accurate response schemas in the OpenAPI output, annotate methods with:
+- `[ApiResponse(statusCode, typeof(ResponseType))]`
+
+For better generated help and console integration, you can also annotate methods with:
+- `[ApiSummary("Short human-readable description")]`
+- `[ApiConsole("custom alias")]`
+- `[ApiConsole(enabled: false)]` to keep a route out of the auto-generated console surface
+
+For parameter metadata that reflection cannot infer on its own, annotate parameters with:
+- `[ApiDoc("Human-readable description")]`
+- `DisplayType = "Vector3"` for semantic types that are transported as strings
+- `Format = "x,y,z"` for serialized query/path formats
+- `Example = "1,2,3"` for example values
+- `AllowedValues = new string[] { "A", "B" }` for constrained string parameters
+
+If a parameter has no explicit binding attribute, extApi uses the legacy binder:
+- query string is checked first
+- route parameters are checked second
+- missing values fall back to the type default
+
+The HTML view also shows body schemas and whether a parameter is using legacy binding.
+
+Example response:
+
+```json
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "extApi",
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/api/vector/{x}/{y}/{z}": {
+      "get": {
+        "operationId": "ExampleController.GetVector",
+        "parameters": [
+          {
+            "name": "x",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "number",
+              "format": "float"
+            }
+          }
+        ]
+      }
+    }
+  }
 }
 ```
 
