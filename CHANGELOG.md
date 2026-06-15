@@ -1,3 +1,10 @@
+## [1.4.2](https://github.com/icosa-mirror/extApi/compare/v1.4.1...v1.4.2) (2026-06-14)
+
+
+### Bug Fixes
+
+* restore upm package changes to main ([8cba6f4](https://github.com/icosa-mirror/extApi/commit/8cba6f4d42ab4a1716415cab5193a509357dff90))
+
 ## [1.4.1](https://github.com/Iam1337/extApi/compare/v1.4.0...v1.4.1) (2024-12-10)
 
 
