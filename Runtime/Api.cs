@@ -14,6 +14,7 @@ namespace extApi
     public class ApiAccessOptions
     {
         public bool EnableRemoteRequests { get; set; }
+        public bool EnableCorsHeaders { get; set; }
         public IReadOnlyCollection<string> AllowedCorsOrigins { get; set; } = Array.Empty<string>();
     }
 
@@ -275,6 +276,9 @@ namespace extApi
         {
             if (!context.Request.IsLocal && !_accessOptions.EnableRemoteRequests)
                 return false;
+
+            if (!_accessOptions.EnableCorsHeaders)
+                return true;
 
             var origin = context.Request.Headers["Origin"];
             if (string.IsNullOrWhiteSpace(origin))
