@@ -281,7 +281,7 @@ namespace extApi
                 return true;
 
             if (!TryGetAllowedCorsOrigin(origin, out var allowedOrigin))
-                return false;
+                return true;
 
             context.Response.AddHeader("Access-Control-Allow-Origin", allowedOrigin);
             context.Response.AddHeader("Vary", "Origin");
