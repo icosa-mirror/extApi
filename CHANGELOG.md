@@ -1,3 +1,10 @@
+# [1.5.0](https://github.com/icosa-mirror/extApi/compare/v1.4.2...v1.5.0) (2026-06-15)
+
+
+### Features
+
+* allow loopback CORS origins by default ([85975fc](https://github.com/icosa-mirror/extApi/commit/85975fc4a0f599a619a24a39fe4122bb16e2c55d))
+
 ## [1.4.2](https://github.com/icosa-mirror/extApi/compare/v1.4.1...v1.4.2) (2026-06-14)
 
 
